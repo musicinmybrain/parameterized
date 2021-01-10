@@ -14,8 +14,9 @@ except ImportError:
         return TestCase().assertRaises(*args, **kwds)
 
 from .parameterized import (
-    PY3, PY2, parameterized, param, parameterized_argument_value_pairs,
-    short_repr, detect_runner, parameterized_class, SkipTest,
+    PY3, PY2, PYTEST4, parameterized, param,
+    parameterized_argument_value_pairs, short_repr, detect_runner,
+    parameterized_class, SkipTest,
 )
 
 
@@ -47,6 +48,7 @@ runner = detect_runner()
 UNITTEST = runner.startswith("unittest")
 NOSE2 = (runner == "nose2")
 PYTEST = (runner == "pytest")
+PYTEST4 = PYTEST4 and (runner == "pytest")
 
 SKIP_FLAGS = {
     "generator": UNITTEST,
@@ -204,19 +206,20 @@ class TestParameterizedExpandWithMockPatchForClass(TestCase):
                               mock_fdopen._mock_name, mock_getpid._mock_name))
 
 
-@mock.patch("os.getpid")
-class TestParameterizedExpandWithNoExpand(object):
-    expect("generator", [
-        "test_patch_class_no_expand(42, 51, 'umask', 'getpid')",
-    ])
+if not PYTEST4:
+    @mock.patch("os.getpid")
+    class TestParameterizedExpandWithNoExpand(object):
+        expect("generator", [
+            "test_patch_class_no_expand(42, 51, 'umask', 'getpid')",
+        ])
 
-    @parameterized([(42, 51)])
-    @mock.patch("os.umask")
-    def test_patch_class_no_expand(self, foo, bar, mock_umask, mock_getpid):
-        missing_tests.remove("test_patch_class_no_expand"
-                             "(%r, %r, %r, %r)" %
-                             (foo, bar, mock_umask._mock_name,
-                              mock_getpid._mock_name))
+        @parameterized([(42, 51)])
+        @mock.patch("os.umask")
+        def test_patch_class_no_expand(self, foo, bar, mock_umask, mock_getpid):
+            missing_tests.remove("test_patch_class_no_expand"
+                                 "(%r, %r, %r, %r)" %
+                                 (foo, bar, mock_umask._mock_name,
+                                  mock_getpid._mock_name))
 
 
 class TestParameterizedExpandWithNoMockPatchForClass(TestCase):
@@ -703,3 +706,16 @@ if sys.version_info.major == 3 and sys.version_info.minor >= 8:
         async def test_one_async_function_patch_decorator(self, foo, mock_umask):
             missing_tests.remove("test_one_async_function_patch_decorator(%r, %r)" %
                                  (foo, mock_umask._mock_name))
+
+if PYTEST4:
+    def test_missing_argument_error():
+        try:
+            @parameterized([
+                (1, ),
+            ])
+            def foo(a, b):
+                pass
+        except ValueError as e:
+            assert_contains(repr(e), "no value for arguments: 'b'")
+        else:
+            raise AssertionError("Expected exception not raised")
